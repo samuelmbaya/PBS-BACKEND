@@ -19,6 +19,43 @@ async function connectToMongo() {
     console.log("Connected to MongoDB");
 }
 
+// Middleware for Basic Authentication
+async function basicAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    // Get the user/password from http headers
+    if (!authHeader || !authHeader.startsWith("Basic ")) {
+        return res
+            .status(401)
+            .json({ message: "Authorization header missing or invalid" });
+    }
+
+    // Split the credentials into a user/password
+    const base64Credentials = authHeader.split(" ")[1];
+    const credentials = base64.decode(base64Credentials).split(":");
+    const email = credentials[0];
+    const password = credentials[1];
+
+    // Read MongoDB
+    const collection = db.collection("users");
+    const user = await collection.findOne({ email });
+
+    // If user not found
+    if (!user) {
+        return res.status(401).json({ message: "User not found" });
+    }
+
+    // Decode and check the password
+    const decodedStoredPassword = base64.decode(user.password);
+    if (decodedStoredPassword !== password) {
+        return res.status(401).json({ message: "Invalid password" });
+    }
+
+    req.user = user;
+    next();
+}
+
+
 //sign in
 app.post('/signin', async (req, res) => {
     try {
@@ -56,6 +93,38 @@ app.post('/signin', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+app.post('/signup', async (req, res) => {
+    try {
+        const user = req.body;
+        console.log(user)
+
+        if (user.password.length < 8) throw new Error('Password must be at least 8 characters long');
+        if (!user.email.includes("@")) throw new Error('Invalid email format');
+        if (user.password !== user.confirmPassword) throw new Error('Passwords do not match');
+
+        delete user.currentPassword;
+        user.password = base64.encode(user.password);
+
+        const collection = db.collection("Users");
+        const result = await collection.insertOne({
+            ...user,
+            createdAt: new Date (),
+        });
+
+        res.status(201).json({
+            message: "User successfully created",
+            user_id: result.insertedId,
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({error: error.message})
+    }
+});
+
+
+app.use(basicAuth);
+
 
 //CART
 app.get('/cart', async (req, res) => {
@@ -145,33 +214,6 @@ app.delete('/cart/:productId', async (req, res) => {
 });
 
 //sign up
-app.post('/signup', async (req, res) => {
-    try {
-        const user = req.body;
-        console.log(user)
-
-        if (user.password.length < 8) throw new Error('Password must be at least 8 characters long');
-        if (!user.email.includes("@")) throw new Error('Invalid email format');
-        if (user.password !== user.confirmPassword) throw new Error('Passwords do not match');
-
-        delete user.currentPassword;
-        user.password = base64.encode(user.password);
-
-        const collection = db.collection("Users");
-        const result = await collection.insertOne({
-            ...user,
-            createdAt: new Date (),
-        });
-
-        res.status(201).json({
-            message: "User successfully created",
-            user_id: result.insertedId,
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({error: error.message})
-    }
-});
 
 // Check Password Endpoint
 app.get('/checkpassword', (req, res) => {
@@ -681,7 +723,11 @@ app.delete('/reviews/:id', async (req, res) => {
 
 
 
-app.listen(port, async () => {
-    await connectToMongo()
-    console.log(`Server is running on http://localhost:${port}`)
-})
+
+connectToMongo().then(() => {
+    app.listen(port, () => {
+        console.log(`Server is running on http://localhost:${port}`);
+    });
+}).catch((error) => {
+    console.error("Failed to connect to MongoDB:", error);
+});
