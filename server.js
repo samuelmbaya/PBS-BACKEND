@@ -1,9 +1,12 @@
 require('dotenv').config()
 const express = require("express")
+const cors = require('cors')
 const { MongoClient, ObjectId } = require("mongodb")
 const app = express()
 const port = process.env.PORT || 3000
 const base64 = require('base-64')
+
+app.use(cors())
 
 const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/"
 
@@ -12,10 +15,9 @@ let client, db
 
 
 async function connectToMongo() {
-    client = new MongoClient(uri, { tls: true });
-
+    client = new MongoClient(process.env.MONGODB_URI, { tls: true });
     await client.connect();
-    db = client.db("PWS");
+    db = client.db("PWS"); // Explicitly set to PWS
     console.log("Connected to MongoDB");
 }
 
@@ -97,33 +99,75 @@ app.post('/signin', async (req, res) => {
 app.post('/signup', async (req, res) => {
     try {
         const user = req.body;
-        console.log(user)
+        console.log(user);
 
+        // Basic validation
         if (user.password.length < 8) throw new Error('Password must be at least 8 characters long');
         if (!user.email.includes("@")) throw new Error('Invalid email format');
         if (user.password !== user.confirmPassword) throw new Error('Passwords do not match');
 
-        delete user.currentPassword;
-        user.password = base64.encode(user.password);
-
         const collection = db.collection("Users");
-        const result = await collection.insertOne({
-            ...user,
-            createdAt: new Date (),
-        });
+        
+        // Normalize email to lowercase for consistent checking
+        const normalizedEmail = user.email.toLowerCase();
+        
+        // Check for existing users with same email (and username if provided)
+        const existingUserQuery = { email: normalizedEmail };
+        if (user.username) {
+            existingUserQuery.$or = [
+                { email: normalizedEmail },
+                { username: user.username }
+            ];
+            delete existingUserQuery.email;
+        }
+        
+        const existingUser = await collection.findOne(existingUserQuery);
+        
+        if (existingUser) {
+            if (existingUser.email === normalizedEmail) {
+                return res.status(409).json({ error: 'Email already registered' });
+            }
+            if (user.username && existingUser.username === user.username) {
+                return res.status(409).json({ error: 'Username already taken' });
+            }
+        }
+
+        // Prepare user data for insertion
+        const userData = { ...user };
+        delete userData.confirmPassword;
+        userData.email = normalizedEmail; // Store normalized email
+        userData.password = base64.encode(user.password);
+        userData.createdAt = new Date();
+
+        // Try to insert the user
+        const result = await collection.insertOne(userData);
 
         res.status(201).json({
             message: "User successfully created",
             user_id: result.insertedId,
         });
+
     } catch (error) {
         console.error(error);
-        res.status(500).json({error: error.message})
+        
+        // Handle MongoDB duplicate key errors (when unique index exists)
+        if (error.code === 11000) {
+            const duplicateField = Object.keys(error.keyPattern || {})[0] || 'field';
+            if (duplicateField === 'email') {
+                return res.status(409).json({ error: 'Email already registered' });
+            } else if (duplicateField === 'username') {
+                return res.status(409).json({ error: 'Username already taken' });
+            } else {
+                return res.status(409).json({ error: `${duplicateField} already exists` });
+            }
+        }
+        
+        res.status(500).json({ error: error.message });
     }
 });
 
 
-app.use(basicAuth);
+// app.use(basicAuth);
 
 
 //CART
@@ -390,7 +434,6 @@ app.put('/users/:id', async (req, res) => {
             return res.status(400).json({ error: 'No changes were made' });
         }
 
-        // Get updated user (excluding password)
         const updatedUser = await db.collection('Users').findOne(
             { _id: new ObjectId(id) },
             { projection: { password: 0 } }
@@ -411,7 +454,6 @@ app.delete('/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Validate MongoDB ObjectId
         if (!ObjectId.isValid(id)) {
             return res.status(400).json({ error: "Invalid user ID" });
         }
@@ -428,101 +470,121 @@ app.delete('/users/:id', async (req, res) => {
         res.status(500).json({ error: "Failed to delete user" });
     }
 });
-
-
-//products
+// Get all products
 app.get('/products', async (req, res) => {
-    try {
-        const products = await db.collection("Products").find().toArray();
-        res.status(200).json({
-            message: "Products fetched successfully",
-            data: products
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: "Failed to fetch products" });
-    }
+  try {
+    const products = await db.collection("Products").find().toArray();
+    res.status(200).json({
+      message: "Products fetched successfully",
+      data: products
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
 });
 
+// 🔥 NEW: Get a single product by ID
+app.get('/products/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid product ID" });
+    }
+
+    const product = await db.collection("Products").findOne({ _id: new ObjectId(id) });
+
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.status(200).json({ data: product });
+  } catch (error) {
+    console.error("GET /products/:id error:", error);
+    res.status(500).json({ error: "Failed to fetch product" });
+  }
+});
+
+// Create a new product
 app.post('/products', async (req, res) => {
-    try {
-        const { name, description, price, category, imageUrl, stock } = req.body;
+  try {
+    const { name, description, price, category, imageUrl, stock } = req.body;
 
-        // Basic validation
-        if (!name || !price || !category) {
-            return res.status(400).json({ error: "Name, price, and category are required" });
-        }
-
-        const newProduct = {
-            name,
-            description: description || "",
-            price: parseFloat(price),
-            category,
-            imageUrl: imageUrl || "",
-            stock: parseInt(stock) || 0,
-            createdAt: new Date()
-        };
-
-        const result = await db.collection("Products").insertOne(newProduct);
-
-        res.status(201).json({
-            message: "Product created successfully",
-            data: {
-                _id: result.insertedId,
-                name,
-                price,
-                category
-            }
-        });
-    } catch (error) {
-        console.error("POST /products error:", error);
-        res.status(500).json({ error: "Failed to create product" });
+    if (!name || !price || !category) {
+      return res.status(400).json({ error: "Name, price, and category are required" });
     }
+
+    const newProduct = {
+      name,
+      description: description || "",
+      price: parseFloat(price),
+      category,
+      imageUrl: imageUrl || "",
+      stock: parseInt(stock) || 0,
+      createdAt: new Date()
+    };
+
+    const result = await db.collection("Products").insertOne(newProduct);
+
+    res.status(201).json({
+      message: "Product created successfully",
+      data: {
+        _id: result.insertedId,
+        name,
+        price,
+        category
+      }
+    });
+  } catch (error) {
+    console.error("POST /products error:", error);
+    res.status(500).json({ error: "Failed to create product" });
+  }
 });
 
+// Update a product
 app.put('/products/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        if (!ObjectId.isValid(id)) {
-            return res.status(400).json({ error: "Invalid product ID" });
-        }
-
-        const updates = { ...req.body };
-
-        // Optional: convert types if present
-        if (updates.price) updates.price = parseFloat(updates.price);
-        if (updates.stock) updates.stock = parseInt(updates.stock);
-
-        // Remove any undefined or null fields
-        Object.keys(updates).forEach(key => {
-            if (updates[key] === undefined || updates[key] === null || updates[key] === "") {
-                delete updates[key];
-            }
-        });
-
-        if (Object.keys(updates).length === 0) {
-            return res.status(400).json({ error: "No valid fields to update" });
-        }
-
-        const result = await db.collection("Products").updateOne(
-            { _id: new ObjectId(id) },
-            { $set: updates }
-        );
-
-        if (result.matchedCount === 0) {
-            return res.status(404).json({ error: "Product not found" });
-        }
-
-        res.status(200).json({
-            message: "Product updated successfully",
-            modifiedCount: result.modifiedCount
-        });
-    } catch (error) {
-        console.error("PUT /products error:", error);
-        res.status(500).json({ error: "Failed to update product" });
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid product ID" });
     }
+
+    const updates = { ...req.body };
+
+    if (updates.price) updates.price = parseFloat(updates.price);
+    if (updates.stock) updates.stock = parseInt(updates.stock);
+
+    Object.keys(updates).forEach(key => {
+      if (updates[key] === undefined || updates[key] === null || updates[key] === "") {
+        delete updates[key];
+      }
+    });
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
+    }
+
+    const result = await db.collection("Products").updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updates }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.status(200).json({
+      message: "Product updated successfully",
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error("PUT /products error:", error);
+    res.status(500).json({ error: "Failed to update product" });
+  }
 });
 
+// Delete a product
 app.delete('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -544,7 +606,6 @@ app.delete('/products/:id', async (req, res) => {
   }
 });
 
-//order items
 app.get('/order-items', async (req, res) => {
     try {
         const items = await db.collection("Order items data").find().toArray();
@@ -721,13 +782,10 @@ app.delete('/reviews/:id', async (req, res) => {
   }
 });
 
-
-
-
 connectToMongo().then(() => {
-    app.listen(port, () => {
-        console.log(`Server is running on http://localhost:${port}`);
-    });
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server is running on http://0.0.0.0:${port}`);
+});
 }).catch((error) => {
     console.error("Failed to connect to MongoDB:", error);
 });
