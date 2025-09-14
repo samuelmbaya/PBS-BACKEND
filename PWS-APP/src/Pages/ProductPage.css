@@ -1,0 +1,277 @@
+/* 🌑 Black Theme Only */
+.homepage {
+  min-height: 100vh;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #0d0d0d;
+  color: #f9f9f9;
+  padding-top: 90px;
+}
+
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #111;
+  color: #fff;
+  padding: 1rem 2rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.logo {
+  font-size: 1.6rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.searchbar {
+  display: flex;
+  align-items: center;
+  background: #222;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+}
+
+.searchbar input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  margin-left: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.nav-buttons {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.nav-buttons button {
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+}
+
+.nav-buttons button:hover {
+  color: crimson;
+  background: rgba(220,20,60,0.1);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logout-btn {
+  background: crimson;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.logout-btn:hover {
+  background: #e63946;
+}
+
+/* Products Grid */
+.products-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.8rem;
+  padding: 2rem;
+}
+
+.product-card {
+  background: #181818;
+  border: 1px solid #2c2c2c;
+  border-radius: 12px;
+  padding: 1.2rem;
+  text-align: center;
+  color: #f9f9f9;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  height: 100%;
+}
+
+.product-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+}
+
+.product-img {
+  height: 180px;
+  object-fit: contain;
+  width: 100%;
+  margin-bottom: 0.8rem;
+}
+
+.product-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.4rem 0;
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.price {
+  font-weight: 600;
+  margin: 0.5rem 0;
+  font-size: 1.1rem;
+  color: #ff4c4c;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.actions button {
+  flex: 1;
+  padding: 0.6rem;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: transform 0.2s, background 0.3s;
+}
+
+.add-to-cart-btn {
+  background: crimson;
+  color: #fff;
+}
+
+.add-to-cart-btn:hover {
+  background: #e63946;
+  transform: scale(1.05);
+}
+
+.wishlist-btn {
+  background: #333;
+  color: #fff;
+}
+
+.wishlist-btn:hover {
+  background: #444;
+  transform: scale(1.05);
+}
+
+.wishlist-btn.in-wishlist {
+  background: #e74c3c;
+  color: #fff;
+}
+
+.in-cart-indicator {
+  margin-top: 0.5rem;
+  font-size: 12px;
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.error {
+  color: #e74c3c;
+  text-align: center;
+  font-size: 1.1rem;
+  margin: 2rem 0;
+}
+
+/* Popups (Cart/Wishlist) */
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  justify-content: flex-end;
+  z-index: 200;
+}
+
+.popup-overlay.active {
+  display: flex;
+}
+
+.popup-panel {
+  background: #181818;
+  width: 350px;
+  max-width: 90%;
+  height: 100%;
+  padding: 1.5rem;
+  color: #fff;
+  box-shadow: -4px 0 12px rgba(0,0,0,0.5);
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.popup-header h2 {
+  font-size: 1.3rem;
+}
+
+.popup-header button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #fff;
+  cursor: pointer;
+}
+
+.popup-header button:hover {
+  color: crimson;
+}
+
+.popup-items {
+  max-height: calc(100% - 100px);
+  overflow-y: auto;
+}
+
+.popup-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.popup-item img {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  margin-right: 1rem;
+  border-radius: 8px;
+  background: #222;
+}
+
+.popup-item-details {
+  flex: 1;
+}
+
+.popup-item-details h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.popup-item-details p {
+  margin: 0.2rem 0;
+  font-size: 0.85rem;
+  color: #aaa;
+}

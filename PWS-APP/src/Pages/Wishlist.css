@@ -1,0 +1,130 @@
+.wishlist-page {
+  min-height: 100vh;
+  padding: 20px;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* Dark mode */
+.wishlist-page.dark {
+  background-color: #000;
+  color: #fff;
+}
+
+.wishlist-page.dark .wishlist-item {
+  background-color: #2b2b2b;
+}
+
+.wishlist-page.dark .wishlist-item-info p {
+  color: #bbb;
+}
+
+/* Light mode */
+.wishlist-page.light {
+  background-color: #f8f8f8;
+  color: #222;
+}
+
+.wishlist-page.light .wishlist-item {
+  background-color: #fff;
+  border: 1px solid #ddd;
+}
+
+.wishlist-page.light .wishlist-item-info p {
+  color: #555;
+}
+
+.wishlist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.wishlist-page h1 {
+  text-align: left;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.wishlist-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.wishlist-item {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  padding: 12px 15px;
+}
+
+.wishlist-item-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  object-fit: cover;
+  margin-right: 15px;
+}
+
+.wishlist-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.wishlist-item-info h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.wishlist-item-info p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.remove-btn {
+  background: crimson !important;
+  color: #fff !important;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+}
+
+.remove-btn:hover {
+  background: #e63946 !important;
+}
+
+.continue-shopping-btn {
+  background: crimson !important;
+  color: #fff !important;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+}
+
+.continue-shopping-btn:hover {
+  background: #e63946 !important;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .wishlist-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: flex-start;
+  }
+  
+  .wishlist-page h1 {
+    text-align: center;
+    align-self: center;
+  }
+}

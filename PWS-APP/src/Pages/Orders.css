@@ -1,0 +1,141 @@
+.orders-page {
+  min-height: 100vh;
+  padding: 20px;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* Dark mode */
+.orders-page.dark {
+  background-color: #000;
+  color: #fff;
+}
+
+.orders-page.dark .order-card {
+  background-color: #2b2b2b;
+}
+
+.orders-page.dark .order-item-info p {
+  color: #bbb;
+}
+
+/* Light mode */
+.orders-page.light {
+  background-color: #f8f8f8;
+  color: #222;
+}
+
+.orders-page.light .order-card {
+  background-color: #fff;
+  border: 1px solid #ddd;
+}
+
+.orders-page.light .order-item-info p {
+  color: #555;
+}
+
+.orders-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.orders-page h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.order-card {
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.order-info {
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.order-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.order-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.order-item-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.order-item-info h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.order-item-info p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.order-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.continue-shopping-btn {
+  background: crimson !important;
+  color: #fff !important;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+}
+
+.continue-shopping-btn:hover {
+  background: #e63946 !important;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .orders-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: flex-start;
+  }
+
+  .orders-page h1 {
+    text-align: center;
+    align-self: center;
+  }
+
+  .order-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}

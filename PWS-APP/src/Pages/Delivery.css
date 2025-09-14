@@ -1,0 +1,143 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+  text-decoration: none;
+  list-style: none;
+}
+
+/* ===== Delivery Page Dark Mode ===== */
+.delivery-section {
+  background: #000; /* inherited black background */
+  color: #fff;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.delivery-header {
+  background-color: #111; /* dark card header */
+  padding: 15px 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.delivery-header h2 {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.shipping-address {
+  background-color: #111; /* card body */
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(255,255,255,0.1);
+}
+
+.shipping-address h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+/* ===== Form Styles ===== */
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.form-row.three-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.half-width {
+  flex: 1;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 15px;
+  border-radius: 8px;
+  border: none;
+  background: #333;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+}
+
+.form-input::placeholder {
+  color: #aaa;
+}
+
+.form-input:focus {
+  background: #444;
+  border-color: #007bff;
+}
+
+.return-to-cart {
+  margin-top: 20px;
+  text-align: left;
+}
+
+.return-link {
+  color: #007bff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.return-link:hover {
+  color: #4da6ff;
+  text-decoration: underline;
+}
+
+.continue-section {
+  margin-top: 25px;
+}
+
+.continue-btn {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 8px;
+  background: #007bff;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.continue-btn:hover {
+  background: #0056b3;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .form-row {
+    flex-direction: column;
+  }
+
+  .form-row.three-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .form-input {
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+
+  .continue-btn {
+    font-size: 15px;
+    padding: 12px;
+  }
+}
