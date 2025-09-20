@@ -316,7 +316,7 @@ app.get('/orders/:id', async (req, res) => {
 });
 
 // CREATE new order
-app.post('/orders', async (req, res) => {
+app.post('/order', async (req, res) => {
   console.log('POST /orders route hit!');
   console.log('Request body:', req.body);
   console.log('Headers:', req.headers);
