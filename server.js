@@ -2,14 +2,11 @@ require('dotenv').config()
 const express = require("express")
 const cors = require('cors')
 const { MongoClient, ObjectId } = require("mongodb")
-const base64 = require('base-64')
-
 const app = express()
 const port = process.env.PORT || 3000
+const base64 = require('base-64')
 
-console.log('Starting server setup...');
-
-// CORS configuration
+// Updated CORS configuration to allow your domain
 app.use(cors({
   origin: [
     'https://poweredbysamuel.co.za',
@@ -24,453 +21,777 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }))
 
+const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/"
+
 app.use(express.json())
-
-console.log('Middleware configured...');
-
 let client, db
 
 async function connectToMongo() {
-  try {
     client = new MongoClient(process.env.MONGODB_URI, { tls: true });
     await client.connect();
-    db = client.db("PWS");
+    db = client.db("PWS"); // Explicitly set to PWS
     console.log("Connected to MongoDB");
-  } catch (error) {
-    console.error("MongoDB connection error:", error);
-    throw error;
-  }
 }
 
-// Basic request logging
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  next();
-});
+// Middleware for Basic Authentication
+async function basicAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
 
-console.log('Setting up routes...');
+    // Get the user/password from http headers
+    if (!authHeader || !authHeader.startsWith("Basic ")) {
+        return res
+            .status(401)
+            .json({ message: "Authorization header missing or invalid" });
+    }
 
-// ======================= HEALTH CHECK =======================
-app.get('/health', (req, res) => {
-  console.log('Health check requested');
-  res.json({
-    success: true,
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    database: db ? 'connected' : 'disconnected'
-  });
-});
+    // Split the credentials into a user/password
+    const base64Credentials = authHeader.split(" ")[1];
+    const credentials = base64.decode(base64Credentials).split(":");
+    const email = credentials[0];
+    const password = credentials[1];
 
-// ======================= TEST ROUTE =======================
-app.get('/test-orders', (req, res) => {
-  console.log('Test route hit');
-  res.json({ 
-    success: true,
-    message: "Orders endpoint is working", 
-    timestamp: new Date().toISOString(),
-    database: db ? "connected" : "disconnected",
-    server: "running"
-  });
-});
+    // Read MongoDB
+    const collection = db.collection("users");
+    const user = await collection.findOne({ email });
 
-// ======================= AUTH ROUTES =======================
-console.log('Setting up auth routes...');
+    // If user not found
+    if (!user) {
+        return res.status(401).json({ message: "User not found" });
+    }
 
+    // Decode and check the password
+    const decodedStoredPassword = base64.decode(user.password);
+    if (decodedStoredPassword !== password) {
+        return res.status(401).json({ message: "Invalid password" });
+    }
+
+    req.user = user;
+    next();
+}
+
+//sign in
 app.post('/signin', async (req, res) => {
-  try {
-    const { email, password } = req.body;
+    try {
+        const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+        // Check for missing fields
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        // Encode the submitted password to match the stored one
+        const encodedPassword = Buffer.from(password).toString('base64');
+
+        // Find the user by email
+        const user = await db.collection('Users').findOne({ email });
+
+        // If user not found or password doesn't match
+        if (!user || user.password !== encodedPassword) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        // If authentication is successful
+        res.status(200).json({
+            message: 'Login successful',
+            user: {
+                id: user._id,
+                email: user.email,
+                name: user.name,
+                createdAt: user.createdAt
+            }
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-
-    const encodedPassword = Buffer.from(password).toString('base64');
-    const user = await db.collection('Users').findOne({ email });
-
-    if (!user || user.password !== encodedPassword) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    res.status(200).json({
-      message: 'Login successful',
-      user: {
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        createdAt: user.createdAt
-      }
-    });
-
-  } catch (error) {
-    console.error('Signin error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
 });
 
 app.post('/signup', async (req, res) => {
-  try {
-    const user = req.body;
+    try {
+        const user = req.body;
+        console.log(user);
 
-    if (user.password.length < 8) throw new Error('Password must be at least 8 characters long');
-    if (!user.email.includes("@")) throw new Error('Invalid email format');
-    if (user.password !== user.confirmPassword) throw new Error('Passwords do not match');
+        // Basic validation
+        if (user.password.length < 8) throw new Error('Password must be at least 8 characters long');
+        if (!user.email.includes("@")) throw new Error('Invalid email format');
+        if (user.password !== user.confirmPassword) throw new Error('Passwords do not match');
 
-    const collection = db.collection("Users");
-    const normalizedEmail = user.email.toLowerCase();
+        const collection = db.collection("Users");
+        
+        // Normalize email to lowercase for consistent checking
+        const normalizedEmail = user.email.toLowerCase();
+        
+        // Check for existing users with same email (and username if provided)
+        const existingUserQuery = { email: normalizedEmail };
+        if (user.username) {
+            existingUserQuery.$or = [
+                { email: normalizedEmail },
+                { username: user.username }
+            ];
+            delete existingUserQuery.email;
+        }
+        
+        const existingUser = await collection.findOne(existingUserQuery);
+        
+        if (existingUser) {
+            if (existingUser.email === normalizedEmail) {
+                return res.status(409).json({ error: 'Email already registered' });
+            }
+            if (user.username && existingUser.username === user.username) {
+                return res.status(409).json({ error: 'Username already taken' });
+            }
+        }
 
-    const existingUser = await collection.findOne({ email: normalizedEmail });
+        // Prepare user data for insertion
+        const userData = { ...user };
+        delete userData.confirmPassword;
+        userData.email = normalizedEmail; // Store normalized email
+        userData.password = base64.encode(user.password);
+        userData.createdAt = new Date();
 
-    if (existingUser) {
-      return res.status(409).json({ error: 'Email already registered' });
+        // Try to insert the user
+        const result = await collection.insertOne(userData);
+
+        res.status(201).json({
+            message: "User successfully created",
+            user_id: result.insertedId,
+        });
+
+    } catch (error) {
+        console.error(error);
+        
+        // Handle MongoDB duplicate key errors (when unique index exists)
+        if (error.code === 11000) {
+            const duplicateField = Object.keys(error.keyPattern || {})[0] || 'field';
+            if (duplicateField === 'email') {
+                return res.status(409).json({ error: 'Email already registered' });
+            } else if (duplicateField === 'username') {
+                return res.status(409).json({ error: 'Username already taken' });
+            } else {
+                return res.status(409).json({ error: `${duplicateField} already exists` });
+            }
+        }
+        
+        res.status(500).json({ error: error.message });
     }
-
-    const userData = { ...user };
-    delete userData.confirmPassword;
-    userData.email = normalizedEmail;
-    userData.password = base64.encode(user.password);
-    userData.createdAt = new Date();
-
-    const result = await collection.insertOne(userData);
-
-    res.status(201).json({
-      message: "User successfully created",
-      user_id: result.insertedId,
-    });
-
-  } catch (error) {
-    console.error('Signup error:', error);
-    res.status(500).json({ error: error.message });
-  }
 });
 
-// ======================= ORDER ROUTES =======================
-console.log('Setting up order routes...');
+// app.use(basicAuth);
 
-// GET all orders
-app.get('/orders', async (req, res) => {
-  console.log('GET /orders route hit');
-  try {
-    if (!db) {
-      return res.status(500).json({ error: "Database connection not available" });
+//CART
+app.get('/cart', async (req, res) => {
+    try {
+        const cart = await db.collection("Cart").find().toArray();
+        res.status(200).json({
+            message: "Cart fetched successfully",
+            data: cart
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to fetch cart items" });
     }
+});
 
-    const orders = await db.collection("Orders").find().toArray();
-    console.log(`Fetched ${orders.length} orders`);
+app.post('/cart', async (req, res) => {
+    try {
+        const newItem = req.body;
+
+        // Optional: Validate required fields
+        if (!newItem.productId || !newItem.quantity) {
+            return res.status(400).json({ error: "Missing productId or quantity" });
+        }
+
+        const result = await db.collection("Cart").insertOne(newItem);
+
+        res.status(201).json({
+            message: "Item added to cart successfully",
+            data: {
+                _id: result.insertedId,
+                ...newItem
+            }
+        });
+    } catch (error) {
+        console.error("Insert failed:", error);
+        res.status(500).json({ error: "Failed to add item to cart" });
+    }
+});
+
+app.put('/cart/:productId', async (req, res) => {
+    try {
+        const { productId } = req.params;
+        const updateData = req.body;
+
+        if (!updateData.quantity) {
+            return res.status(400).json({ error: "Missing quantity in request body" });
+        }
+
+        const result = await db.collection("Cart").updateOne(
+            { productId: productId },
+            { $set: { quantity: updateData.quantity } }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: "Item not found in cart" });
+        }
+
+        res.status(200).json({
+            message: "Cart item updated successfully",
+            updated: result.modifiedCount
+        });
+    } catch (error) {
+        console.error("Update failed:", error);
+        res.status(500).json({ error: "Failed to update cart item" });
+    }
+});
+
+app.delete('/cart/:productId', async (req, res) => {
+    try {
+        const { productId } = req.params;
+
+        const result = await db.collection("Cart").deleteOne({ productId: productId });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ error: "Item not found in cart" });
+        }
+
+        res.status(200).json({
+            message: "Cart item deleted successfully",
+            deleted: result.deletedCount
+        });
+    } catch (error) {
+        console.error("Delete failed:", error);
+        res.status(500).json({ error: "Failed to delete cart item" });
+    }
+});
+
+//sign up
+
+// Check Password Endpoint
+app.get('/checkpassword', (req, res) => {
+    const { password, confirmPassword } = req.query;
     
-    res.status(200).json({ 
-      success: true,
-      message: "Orders fetched successfully", 
-      data: orders,
-      count: orders.length
+    if (!password || !confirmPassword) {
+        return res.status(400).send('400 - Bad Request: Missing password or confirmPassword');
+    }
+    
+    if (password !== confirmPassword) {
+        return res.status(400).send('400 - Passwords do not match');
+    }
+    
+    res.status(200).send('200 - Passwords match');
+});
+
+//users
+app.get('/users', async (req, res) => {
+    try {
+        const users = await db.collection("Users").find({}, {
+            projection: { password: 0 }  // hide password field
+        }).toArray();
+
+        res.status(200).json({
+            message: "Users fetched successfully",
+            data: users
+        });
+    } catch (error) {
+        console.error("GET /users error:", error);
+        res.status(500).json({ error: "Failed to fetch users" });
+    }
+});
+
+app.post('/users', async (req, res) => {
+    try {
+        const { name, email, password, role = "customer", test } = req.body;
+
+        // Insert test users if test flag is true
+        if (test === true) {
+            const testUsers = [
+                {
+                    name: "Kai Samuel",
+                    email: "samuecfgvhbnl@example.com",
+                    password: Buffer.from("pass123").toString('base64'),
+                    role: "customer",
+                    createdAt: new Date()
+                },
+                {
+                    name: "ftyguh kjhg",
+                    email: "dtfg@example.com",
+                    password: Buffer.from("secret456").toString('base64'),
+                    role: "admin",
+                    createdAt: new Date()
+                },
+                {
+                    name: "dtfchgj nmn",
+                    email: "rduhbgft@example.com",
+                    password: Buffer.from("mypassword").toString('base64'),
+                    role: "customer",
+                    createdAt: new Date()
+                }
+            ];
+
+            const result = await db.collection("Users").insertMany(testUsers);
+
+            return res.status(201).json({
+                message: "Test users created successfully",
+                insertedCount: result.insertedCount,
+                insertedIds: result.insertedIds
+            });
+        }
+
+        // Regular single user insertion
+        if (!name || !email || !password) {
+            return res.status(400).json({ error: "Name, email, and password are required" });
+        }
+
+        const existingUser = await db.collection("Users").findOne({ email });
+        if (existingUser) {
+            return res.status(409).json({ error: "User already exists" });
+        }
+
+        const encodedPassword = Buffer.from(password).toString('base64');
+
+        const newUser = {
+            name,
+            email,
+            password: encodedPassword,
+            role,
+            createdAt: new Date()
+        };
+
+        const result = await db.collection("Users").insertOne(newUser);
+
+        res.status(201).json({
+            message: "User created successfully",
+            data: { _id: result.insertedId, name, email, role }
+        });
+    } catch (error) {
+        console.error("POST /users error:", error);
+        res.status(500).json({ error: "Failed to create user" });
+    }
+});
+
+app.put('/users/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, email, password, ...otherFields } = req.body;
+
+        // Validate ObjectId format
+        if (!id || id.length !== 24 || !/^[0-9a-fA-F]{24}$/.test(id)) {
+            return res.status(400).json({ error: "Invalid user ID format" });
+        }
+
+        // Check if user exists
+        const existingUser = await db.collection('Users').findOne({ _id: new ObjectId(id) });
+        if (!existingUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Prepare update data
+        const updateData = { ...otherFields };
+
+        // Handle name update
+        if (name !== undefined) {
+            if (!name.trim()) {
+                return res.status(400).json({ error: 'Name cannot be empty' });
+            }
+            updateData.name = name.trim();
+        }
+
+        // Handle email update
+        if (email !== undefined) {
+            if (!email || !/\S+@\S+\.\S+/.test(email)) {
+                return res.status(400).json({ error: 'Valid email is required' });
+            }
+            
+            // Check if email is already taken by another user
+            const emailExists = await db.collection('Users').findOne({ 
+                email, 
+                _id: { $ne: new ObjectId(id) } 
+            });
+            
+            if (emailExists) {
+                return res.status(409).json({ error: 'Email already exists' });
+            }
+            
+            updateData.email = email.toLowerCase();
+        }
+
+        // Handle password update
+        if (password !== undefined) {
+            if (!password || password.length < 6) {
+                return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+            }
+            // Encode password to match your signin logic
+            updateData.password = Buffer.from(password).toString('base64');
+        }
+
+        // Add updated timestamp
+        updateData.updatedAt = new Date();
+
+        // Remove _id from update data if present
+        delete updateData._id;
+
+        // Update the user
+        const result = await db.collection('Users').updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updateData }
+        );
+
+        if (result.modifiedCount === 0) {
+            return res.status(400).json({ error: 'No changes were made' });
+        }
+
+        const updatedUser = await db.collection('Users').findOne(
+            { _id: new ObjectId(id) },
+            { projection: { password: 0 } }
+        );
+
+        res.status(200).json({
+            message: 'User updated successfully',
+            user: updatedUser
+        });
+
+    } catch (error) {
+        console.error('Update user error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.delete('/users/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid user ID" });
+        }
+
+        const result = await db.collection("Users").deleteOne({ _id: new ObjectId(id) });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        res.status(200).json({ message: "User deleted successfully" });
+    } catch (error) {
+        console.error("DELETE /users error:", error);
+        res.status(500).json({ error: "Failed to delete user" });
+    }
+});
+
+// Get all products
+app.get('/products', async (req, res) => {
+  try {
+    const products = await db.collection("Products").find().toArray();
+    res.status(200).json({
+      message: "Products fetched successfully",
+      data: products
     });
   } catch (error) {
-    console.error('Error in GET /orders:', error);
-    res.status(500).json({ 
-      error: "Failed to fetch orders",
-      details: process.env.NODE_ENV !== 'production' ? error.message : undefined
-    });
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch products" });
   }
 });
 
-// GET specific order by ID
-app.get('/orders/:id', async (req, res) => {
-  console.log('GET /orders/:id route hit with id:', req.params.id);
+// Get a single product by ID
+app.get('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "Invalid order ID format" });
+      return res.status(400).json({ error: "Invalid product ID" });
     }
 
-    if (!db) {
-      return res.status(500).json({ error: "Database connection not available" });
+    const product = await db.collection("Products").findOne({ _id: new ObjectId(id) });
+
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" });
     }
 
-    const order = await db.collection("Orders").findOne({ _id: new ObjectId(id) });
-    
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    res.status(200).json({ 
-      success: true,
-      data: order 
-    });
+    res.status(200).json({ data: product });
   } catch (error) {
-    console.error('Error in GET /orders/:id:', error);
-    res.status(500).json({ 
-      error: "Failed to fetch order",
-      details: process.env.NODE_ENV !== 'production' ? error.message : undefined
-    });
+    console.error("GET /products/:id error:", error);
+    res.status(500).json({ error: "Failed to fetch product" });
   }
 });
 
-// CREATE new order
-app.post('/orders', async (req, res) => {
-  console.log('POST /orders route hit');
-  console.log('Request body:', JSON.stringify(req.body, null, 2));
-  
+// Create a new product
+app.post('/products', async (req, res) => {
   try {
-    const { userId, items, totalAmount, status, deliveryData } = req.body;
+    const { name, description, price, category, imageUrl, stock } = req.body;
 
-    // Validation
-    if (!userId) {
-      return res.status(400).json({ error: "userId is required" });
-    }
-    
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "items array is required and cannot be empty" });
-    }
-    
-    if (totalAmount === undefined || totalAmount === null) {
-      return res.status(400).json({ error: "totalAmount is required" });
+    if (!name || !price || !category) {
+      return res.status(400).json({ error: "Name, price, and category are required" });
     }
 
-    if (!db) {
-      return res.status(500).json({ error: "Database connection not available" });
-    }
-
-    const newOrder = {
-      userId: userId.toString(),
-      items: items,
-      totalAmount: parseFloat(totalAmount) || 0,
-      status: status || "pending",
-      deliveryData: deliveryData || null,
-      createdAt: new Date(),
-      updatedAt: new Date()
+    const newProduct = {
+      name,
+      description: description || "",
+      price: parseFloat(price),
+      category,
+      imageUrl: imageUrl || "",
+      stock: parseInt(stock) || 0,
+      createdAt: new Date()
     };
 
-    console.log('Creating order with data:', JSON.stringify(newOrder, null, 2));
+    const result = await db.collection("Products").insertOne(newProduct);
 
-    const collection = db.collection("Orders");
-    const result = await collection.insertOne(newOrder);
-
-    console.log('Order created successfully with ID:', result.insertedId);
-
-    res.status(201).json({ 
-      success: true,
-      message: "Order created successfully", 
-      data: { 
-        _id: result.insertedId, 
-        ...newOrder 
-      } 
+    res.status(201).json({
+      message: "Product created successfully",
+      data: {
+        _id: result.insertedId,
+        name,
+        price,
+        category
+      }
     });
-
   } catch (error) {
-    console.error('Error in POST /orders:', error);
-    res.status(500).json({ 
-      error: "Failed to create order",
-      details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
-      timestamp: new Date().toISOString()
-    });
+    console.error("POST /products error:", error);
+    res.status(500).json({ error: "Failed to create product" });
   }
 });
 
-// UPDATE order
-app.put('/orders/:id', async (req, res) => {
-  console.log('PUT /orders/:id route hit with id:', req.params.id);
-  
+// Update a product
+app.put('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
     if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "Invalid order ID format" });
+      return res.status(400).json({ error: "Invalid product ID" });
     }
 
-    if (!db) {
-      return res.status(500).json({ error: "Database connection not available" });
+    const updates = { ...req.body };
+
+    if (updates.price) updates.price = parseFloat(updates.price);
+    if (updates.stock) updates.stock = parseInt(updates.stock);
+
+    Object.keys(updates).forEach(key => {
+      if (updates[key] === undefined || updates[key] === null || updates[key] === "") {
+        delete updates[key];
+      }
+    });
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
     }
 
-    const updates = { ...req.body, updatedAt: new Date() };
-    delete updates._id;
-
-    const result = await db.collection("Orders").updateOne(
+    const result = await db.collection("Products").updateOne(
       { _id: new ObjectId(id) },
       { $set: updates }
     );
 
     if (result.matchedCount === 0) {
-      return res.status(404).json({ error: "Order not found" });
+      return res.status(404).json({ error: "Product not found" });
     }
 
-    res.status(200).json({ 
-      success: true,
-      message: "Order updated successfully", 
+    res.status(200).json({
+      message: "Product updated successfully",
       modifiedCount: result.modifiedCount
     });
   } catch (error) {
-    console.error('Error in PUT /orders/:id:', error);
-    res.status(500).json({ 
-      error: "Failed to update order",
-      details: process.env.NODE_ENV !== 'production' ? error.message : undefined
-    });
+    console.error("PUT /products error:", error);
+    res.status(500).json({ error: "Failed to update product" });
   }
 });
 
-// DELETE order
-app.delete('/orders/:id', async (req, res) => {
-  console.log('DELETE /orders/:id route hit with id:', req.params.id);
-  
+// Delete a product
+app.delete('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "Invalid order ID format" });
+      return res.status(400).json({ error: "Invalid product ID" });
     }
 
-    if (!db) {
-      return res.status(500).json({ error: "Database connection not available" });
-    }
-
-    const result = await db.collection("Orders").deleteOne({ _id: new ObjectId(id) });
+    const result = await db.collection("Products").deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
-      return res.status(404).json({ error: "Order not found" });
+      return res.status(404).json({ error: "Product not found" });
     }
 
-    res.status(200).json({ 
-      success: true,
-      message: "Order deleted successfully"
+    res.status(200).json({ message: "Product deleted successfully" });
+  } catch (error) {
+    console.error("DELETE /products error:", error);
+    res.status(500).json({ error: "Failed to delete product" });
+  }
+});
+
+app.get('/order-items', async (req, res) => {
+    try {
+        const items = await db.collection("Order items data").find().toArray();
+        res.json({ message: "Order items fetched", data: items });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch order items" });
+    }
+});
+
+app.post('/order-items', async (req, res) => {
+  try {
+    const { orderId, productId, quantity, price } = req.body;
+
+    if (!orderId || !productId || !quantity || !price) {
+      return res.status(400).json({ error: "orderId, productId, quantity, and price are required" });
+    }
+
+    const newOrderItem = {
+      orderId,
+      productId,
+      quantity: parseInt(quantity),
+      price: parseFloat(price),
+      createdAt: new Date()
+    };
+
+    const result = await db.collection("order-items").insertOne(newOrderItem);
+
+    res.status(201).json({
+      message: "Order item created successfully",
+      data: { _id: result.insertedId, ...newOrderItem }
     });
   } catch (error) {
-    console.error('Error in DELETE /orders/:id:', error);
-    res.status(500).json({ 
-      error: "Failed to delete order",
-      details: process.env.NODE_ENV !== 'production' ? error.message : undefined
+    console.error("POST /order-items error:", error);
+    res.status(500).json({ error: "Failed to create order item" });
+  }
+});
+
+app.put('/order-items/:id', async (req, res) => {
+    try {
+        const result = await db.collection("Order items data").updateOne(
+            { _id: new ObjectId(req.params.id) },
+            { $set: req.body }
+        );
+        res.json({ message: "Order item updated", updatedCount: result.modifiedCount });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to update order item" });
+    }
+});
+
+app.delete('/order-items/:id', async (req, res) => {
+    try {
+        const result = await db.collection("Order items data").deleteOne({ _id: new ObjectId(req.params.id) });
+        if (result.deletedCount === 0) return res.status(404).json({ message: "Item not found" });
+        res.json({ message: "Order item deleted", deletedCount: result.deletedCount });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to delete order item" });
+    }
+});
+
+app.get('/reviews', async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.productId) {
+      filter.productId = req.query.productId;
+    }
+
+    const reviews = await db.collection("Products Reviews").find(filter).toArray();
+
+    res.status(200).json({
+      message: "Reviews fetched successfully",
+      data: reviews
     });
-  }
-});
-
-// ======================= CART ROUTES =======================
-console.log('Setting up cart routes...');
-
-app.get('/cart', async (req, res) => {
-  try {
-    const cart = await db.collection("Cart").find().toArray();
-    res.status(200).json({ message: "Cart fetched successfully", data: cart });
   } catch (error) {
-    console.error('Cart fetch error:', error);
-    res.status(500).json({ error: "Failed to fetch cart items" });
+    console.error("GET /reviews error:", error);
+    res.status(500).json({ error: "Failed to fetch reviews" });
   }
 });
 
-app.post('/cart', async (req, res) => {
+app.put('/reviews/:id', async (req, res) => {
   try {
-    const newItem = req.body;
-
-    if (!newItem.productId || !newItem.quantity) {
-      return res.status(400).json({ error: "Missing productId or quantity" });
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid review ID" });
     }
 
-    const result = await db.collection("Cart").insertOne(newItem);
-    res.status(201).json({ message: "Item added to cart successfully", data: { _id: result.insertedId, ...newItem } });
-  } catch (error) {
-    console.error('Cart add error:', error);
-    res.status(500).json({ error: "Failed to add item to cart" });
-  }
-});
+    const updates = {};
+    if (req.body.rating) {
+      if (req.body.rating < 1 || req.body.rating > 5) {
+        return res.status(400).json({ error: "rating must be between 1 and 5" });
+      }
+      updates.rating = req.body.rating;
+    }
+    if (req.body.comment !== undefined) {
+      updates.comment = req.body.comment;
+    }
+    updates.updatedAt = new Date();
 
-app.put('/cart/:productId', async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const updateData = req.body;
-
-    if (!updateData.quantity) {
-      return res.status(400).json({ error: "Missing quantity in request body" });
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
     }
 
-    const result = await db.collection("Cart").updateOne(
-      { productId: productId },
-      { $set: { quantity: updateData.quantity } }
+    const result = await db.collection("Products Reviews").updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updates }
     );
 
     if (result.matchedCount === 0) {
-      return res.status(404).json({ error: "Item not found in cart" });
+      return res.status(404).json({ error: "Review not found" });
     }
 
-    res.status(200).json({ message: "Cart item updated successfully", updated: result.modifiedCount });
+    res.status(200).json({
+      message: "Review updated successfully",
+      modifiedCount: result.modifiedCount
+    });
   } catch (error) {
-    console.error('Cart update error:', error);
-    res.status(500).json({ error: "Failed to update cart item" });
+    console.error("PUT /reviews error:", error);
+    res.status(500).json({ error: "Failed to update review" });
   }
 });
 
-app.delete('/cart/:productId', async (req, res) => {
+app.post('/reviews', async (req, res) => {
   try {
-    const { productId } = req.params;
-    const result = await db.collection("Cart").deleteOne({ productId: productId });
+    const { productId, userId, rating, comment } = req.body;
+
+    if (!productId || !userId || !rating) {
+      return res.status(400).json({ error: "productId, userId, and rating are required" });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ error: "rating must be between 1 and 5" });
+    }
+
+    const newReview = {
+      productId,
+      userId,
+      rating,
+      comment: comment || "",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const result = await db.collection("reviews").insertOne(newReview);
+
+    res.status(201).json({
+      message: "Review added successfully",
+      data: { _id: result.insertedId, ...newReview }
+    });
+  } catch (error) {
+    console.error("POST /reviews error:", error);
+    res.status(500).json({ error: "Failed to add review" });
+  }
+});
+
+app.delete('/reviews/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid review ID" });
+    }
+
+    const result = await db.collection("Products Reviews").deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
-      return res.status(404).json({ error: "Item not found in cart" });
+      return res.status(404).json({ error: "Review not found" });
     }
 
-    res.status(200).json({ message: "Cart item deleted successfully" });
+    res.status(200).json({ message: "Review deleted successfully" });
   } catch (error) {
-    console.error('Cart delete error:', error);
-    res.status(500).json({ error: "Failed to delete cart item" });
+    console.error("DELETE /reviews error:", error);
+    res.status(500).json({ error: "Failed to delete review" });
   }
 });
 
-// ======================= USER ROUTES =======================
-console.log('Setting up user routes...');
-
-app.get('/users', async (req, res) => {
-  try {
-    const users = await db.collection("Users").find({}, { projection: { password: 0 } }).toArray();
-    res.status(200).json({ message: "Users fetched successfully", data: users });
-  } catch (error) {
-    console.error('Users fetch error:', error);
-    res.status(500).json({ error: "Failed to fetch users" });
-  }
-});
-
-// ======================= ERROR HANDLERS =======================
-console.log('Setting up error handlers...');
-
-// 404 handler
-app.use('*', (req, res) => {
-  console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ 
-    error: 'Route not found',
-    method: req.method,
-    path: req.originalUrl,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Global error handler caught:', err);
-  res.status(500).json({ 
-    error: 'Internal server error',
-    timestamp: new Date().toISOString(),
-    details: process.env.NODE_ENV !== 'production' ? err.message : undefined
-  });
-});
-
-console.log('All routes configured. Starting server...');
-
-// Server startup
 connectToMongo().then(() => {
-  app.listen(port, '0.0.0.0', () => {
-    console.log(`✅ Server is running successfully on http://0.0.0.0:${port}`);
-    console.log('📋 Available endpoints:');
-    console.log('   - GET /health');
-    console.log('   - GET /test-orders');
-    console.log('   - POST /signin');
-    console.log('   - POST /signup');
-    console.log('   - GET /orders');
-    console.log('   - POST /orders');
-    console.log('   - GET /orders/:id');
-    console.log('   - PUT /orders/:id');
-    console.log('   - DELETE /orders/:id');
-    console.log('   - GET /cart');
-    console.log('   - POST /cart');
-    console.log('   - PUT /cart/:productId');
-    console.log('   - DELETE /cart/:productId');
-    console.log('   - GET /users');
-  });
-}).catch((error) => {
-  console.error("❌ Failed to connect to MongoDB:", error);
-  process.exit(1);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server is running on http://0.0.0.0:${port}`);
 });
+}).catch((error) => {
+    console.error("Failed to connect to MongoDB:", error);
+});
+
