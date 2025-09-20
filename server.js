@@ -614,9 +614,159 @@ app.delete('/products/:id', async (req, res) => {
   }
 });
 
+app.get('/orders', async (req, res) => {
+    try {
+        const userId = req.query.userId;
+        let filter = {};
+        
+        if (userId) {
+            filter.userId = userId;
+        }
+
+        const orders = await db.collection("Orders").find(filter).toArray();
+        res.status(200).json({
+            message: "Orders fetched successfully",
+            data: orders
+        });
+    } catch (error) {
+        console.error("GET /orders error:", error);
+        res.status(500).json({ error: "Failed to fetch orders" });
+    }
+});
+
+// Get single order by ID
+app.get('/orders/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid order ID" });
+        }
+
+        const order = await db.collection("Orders").findOne({ _id: new ObjectId(id) });
+
+        if (!order) {
+            return res.status(404).json({ error: "Order not found" });
+        }
+
+        res.status(200).json({ data: order });
+    } catch (error) {
+        console.error("GET /orders/:id error:", error);
+        res.status(500).json({ error: "Failed to fetch order" });
+    }
+});
+
+// Create new order - THIS IS THE MISSING ROUTE CAUSING YOUR ERROR
+app.post('/orders', async (req, res) => {
+    try {
+        const { userId, items, totalAmount, status = "pending", deliveryData, paymentMethod } = req.body;
+
+        // Basic validation
+        if (!userId || !items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ 
+                error: "userId and items array are required" 
+            });
+        }
+
+        if (totalAmount === undefined || totalAmount === null) {
+            return res.status(400).json({ 
+                error: "totalAmount is required" 
+            });
+        }
+
+        const newOrder = {
+            userId,
+            items,
+            totalAmount: parseFloat(totalAmount),
+            status,
+            deliveryData: deliveryData || {},
+            paymentMethod: paymentMethod || "pending",
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const result = await db.collection("Orders").insertOne(newOrder);
+
+        res.status(201).json({
+            message: "Order created successfully",
+            data: {
+                _id: result.insertedId,
+                ...newOrder
+            }
+        });
+
+    } catch (error) {
+        console.error("POST /orders error:", error);
+        res.status(500).json({ error: "Failed to create order" });
+    }
+});
+
+// Update order
+app.put('/orders/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid order ID" });
+        }
+
+        const updates = { ...req.body };
+        delete updates._id; // Remove _id from updates
+        updates.updatedAt = new Date();
+
+        if (updates.totalAmount) {
+            updates.totalAmount = parseFloat(updates.totalAmount);
+        }
+
+        const result = await db.collection("Orders").updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updates }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: "Order not found" });
+        }
+
+        res.status(200).json({
+            message: "Order updated successfully",
+            modifiedCount: result.modifiedCount
+        });
+
+    } catch (error) {
+        console.error("PUT /orders error:", error);
+        res.status(500).json({ error: "Failed to update order" });
+    }
+});
+
+// Delete order
+app.delete('/orders/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid order ID" });
+        }
+
+        const result = await db.collection("Orders").deleteOne({ _id: new ObjectId(id) });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ error: "Order not found" });
+        }
+
+        res.status(200).json({ message: "Order deleted successfully" });
+    } catch (error) {
+        console.error("DELETE /orders error:", error);
+        res.status(500).json({ error: "Failed to delete order" });
+    }
+});
+
+// Fix existing collection name inconsistencies
+// Update your existing order-items routes to use consistent collection names:
+
+// Replace the existing order-items routes with these fixed versions:
 app.get('/order-items', async (req, res) => {
     try {
-        const items = await db.collection("Order items data").find().toArray();
+        const items = await db.collection("OrderItems").find().toArray(); // Fixed collection name
         res.json({ message: "Order items fetched", data: items });
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch order items" });
@@ -624,38 +774,38 @@ app.get('/order-items', async (req, res) => {
 });
 
 app.post('/order-items', async (req, res) => {
-  try {
-    const { orderId, productId, quantity, price } = req.body;
+    try {
+        const { orderId, productId, quantity, price } = req.body;
 
-    if (!orderId || !productId || !quantity || !price) {
-      return res.status(400).json({ error: "orderId, productId, quantity, and price are required" });
+        if (!orderId || !productId || !quantity || !price) {
+            return res.status(400).json({ error: "orderId, productId, quantity, and price are required" });
+        }
+
+        const newOrderItem = {
+            orderId,
+            productId,
+            quantity: parseInt(quantity),
+            price: parseFloat(price),
+            createdAt: new Date()
+        };
+
+        const result = await db.collection("OrderItems").insertOne(newOrderItem); // Fixed collection name
+
+        res.status(201).json({
+            message: "Order item created successfully",
+            data: { _id: result.insertedId, ...newOrderItem }
+        });
+    } catch (error) {
+        console.error("POST /order-items error:", error);
+        res.status(500).json({ error: "Failed to create order item" });
     }
-
-    const newOrderItem = {
-      orderId,
-      productId,
-      quantity: parseInt(quantity),
-      price: parseFloat(price),
-      createdAt: new Date()
-    };
-
-    const result = await db.collection("order-items").insertOne(newOrderItem);
-
-    res.status(201).json({
-      message: "Order item created successfully",
-      data: { _id: result.insertedId, ...newOrderItem }
-    });
-  } catch (error) {
-    console.error("POST /order-items error:", error);
-    res.status(500).json({ error: "Failed to create order item" });
-  }
 });
 
 app.put('/order-items/:id', async (req, res) => {
     try {
-        const result = await db.collection("Order items data").updateOne(
+        const result = await db.collection("OrderItems").updateOne( // Fixed collection name
             { _id: new ObjectId(req.params.id) },
-            { $set: req.body }
+            { $set: { ...req.body, updatedAt: new Date() } }
         );
         res.json({ message: "Order item updated", updatedCount: result.modifiedCount });
     } catch (error) {
@@ -665,7 +815,7 @@ app.put('/order-items/:id', async (req, res) => {
 
 app.delete('/order-items/:id', async (req, res) => {
     try {
-        const result = await db.collection("Order items data").deleteOne({ _id: new ObjectId(req.params.id) });
+        const result = await db.collection("OrderItems").deleteOne({ _id: new ObjectId(req.params.id) }); // Fixed collection name
         if (result.deletedCount === 0) return res.status(404).json({ message: "Item not found" });
         res.json({ message: "Order item deleted", deletedCount: result.deletedCount });
     } catch (error) {
@@ -673,118 +823,119 @@ app.delete('/order-items/:id', async (req, res) => {
     }
 });
 
+// Fix reviews collection name consistency
 app.get('/reviews', async (req, res) => {
-  try {
-    const filter = {};
-    if (req.query.productId) {
-      filter.productId = req.query.productId;
+    try {
+        const filter = {};
+        if (req.query.productId) {
+            filter.productId = req.query.productId;
+        }
+
+        const reviews = await db.collection("Reviews").find(filter).toArray(); // Use consistent name
+
+        res.status(200).json({
+            message: "Reviews fetched successfully",
+            data: reviews
+        });
+    } catch (error) {
+        console.error("GET /reviews error:", error);
+        res.status(500).json({ error: "Failed to fetch reviews" });
     }
-
-    const reviews = await db.collection("Products Reviews").find(filter).toArray();
-
-    res.status(200).json({
-      message: "Reviews fetched successfully",
-      data: reviews
-    });
-  } catch (error) {
-    console.error("GET /reviews error:", error);
-    res.status(500).json({ error: "Failed to fetch reviews" });
-  }
-});
-
-app.put('/reviews/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "Invalid review ID" });
-    }
-
-    const updates = {};
-    if (req.body.rating) {
-      if (req.body.rating < 1 || req.body.rating > 5) {
-        return res.status(400).json({ error: "rating must be between 1 and 5" });
-      }
-      updates.rating = req.body.rating;
-    }
-    if (req.body.comment !== undefined) {
-      updates.comment = req.body.comment;
-    }
-    updates.updatedAt = new Date();
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: "No valid fields to update" });
-    }
-
-    const result = await db.collection("Products Reviews").updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updates }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: "Review not found" });
-    }
-
-    res.status(200).json({
-      message: "Review updated successfully",
-      modifiedCount: result.modifiedCount
-    });
-  } catch (error) {
-    console.error("PUT /reviews error:", error);
-    res.status(500).json({ error: "Failed to update review" });
-  }
 });
 
 app.post('/reviews', async (req, res) => {
-  try {
-    const { productId, userId, rating, comment } = req.body;
+    try {
+        const { productId, userId, rating, comment } = req.body;
 
-    if (!productId || !userId || !rating) {
-      return res.status(400).json({ error: "productId, userId, and rating are required" });
+        if (!productId || !userId || !rating) {
+            return res.status(400).json({ error: "productId, userId, and rating are required" });
+        }
+
+        if (rating < 1 || rating > 5) {
+            return res.status(400).json({ error: "rating must be between 1 and 5" });
+        }
+
+        const newReview = {
+            productId,
+            userId,
+            rating,
+            comment: comment || "",
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const result = await db.collection("Reviews").insertOne(newReview); // Use consistent name
+
+        res.status(201).json({
+            message: "Review added successfully",
+            data: { _id: result.insertedId, ...newReview }
+        });
+    } catch (error) {
+        console.error("POST /reviews error:", error);
+        res.status(500).json({ error: "Failed to add review" });
     }
+});
 
-    if (rating < 1 || rating > 5) {
-      return res.status(400).json({ error: "rating must be between 1 and 5" });
+app.put('/reviews/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid review ID" });
+        }
+
+        const updates = {};
+        if (req.body.rating) {
+            if (req.body.rating < 1 || req.body.rating > 5) {
+                return res.status(400).json({ error: "rating must be between 1 and 5" });
+            }
+            updates.rating = req.body.rating;
+        }
+        if (req.body.comment !== undefined) {
+            updates.comment = req.body.comment;
+        }
+        updates.updatedAt = new Date();
+
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({ error: "No valid fields to update" });
+        }
+
+        const result = await db.collection("Reviews").updateOne( // Use consistent name
+            { _id: new ObjectId(id) },
+            { $set: updates }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: "Review not found" });
+        }
+
+        res.status(200).json({
+            message: "Review updated successfully",
+            modifiedCount: result.modifiedCount
+        });
+    } catch (error) {
+        console.error("PUT /reviews error:", error);
+        res.status(500).json({ error: "Failed to update review" });
     }
-
-    const newReview = {
-      productId,
-      userId,
-      rating,
-      comment: comment || "",
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
-    const result = await db.collection("reviews").insertOne(newReview);
-
-    res.status(201).json({
-      message: "Review added successfully",
-      data: { _id: result.insertedId, ...newReview }
-    });
-  } catch (error) {
-    console.error("POST /reviews error:", error);
-    res.status(500).json({ error: "Failed to add review" });
-  }
 });
 
 app.delete('/reviews/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "Invalid review ID" });
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid review ID" });
+        }
+
+        const result = await db.collection("Reviews").deleteOne({ _id: new ObjectId(id) }); // Use consistent name
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ error: "Review not found" });
+        }
+
+        res.status(200).json({ message: "Review deleted successfully" });
+    } catch (error) {
+        console.error("DELETE /reviews error:", error);
+        res.status(500).json({ error: "Failed to delete review" });
     }
-
-    const result = await db.collection("Products Reviews").deleteOne({ _id: new ObjectId(id) });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ error: "Review not found" });
-    }
-
-    res.status(200).json({ message: "Review deleted successfully" });
-  } catch (error) {
-    console.error("DELETE /reviews error:", error);
-    res.status(500).json({ error: "Failed to delete review" });
-  }
 });
 
 connectToMongo().then(() => {
