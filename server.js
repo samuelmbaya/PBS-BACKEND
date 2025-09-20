@@ -24,6 +24,14 @@ app.use(cors({
 const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/"
 
 app.use(express.json())
+
+// Add middleware to log all requests (place this BEFORE your routes)
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log('Request body:', req.body);
+  next();
+});
+
 let client, db
 
 async function connectToMongo() {
@@ -236,16 +244,29 @@ app.get('/users', async (req, res) => {
   }
 });
 
-// (keeping your POST, PUT, DELETE users endpoints as is...)
+// ======================= TESTING & ERROR HANDLING =======================
 
-// ======================= PRODUCTS =======================
+// Test route to verify server is working
+app.get('/test-orders', (req, res) => {
+  console.log('Test route hit');
+  res.json({ 
+    success: true,
+    message: "Orders endpoint is working", 
+    timestamp: new Date().toISOString(),
+    database: db ? "connected" : "disconnected",
+    server: "running"
+  });
+});
 
-// (keeping your products CRUD as is...)
-
-// ======================= ORDERS =======================
-
-// Replaces old "order-items"
-// ======================= ORDERS =======================
+// Server health check
+app.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    database: db ? 'connected' : 'disconnected'
+  });
+});
 
 // ======================= ORDERS =======================
 
@@ -315,14 +336,14 @@ app.get('/orders/:id', async (req, res) => {
   }
 });
 
-// CREATE new order
-app.post('/order', async (req, res) => {
+// CREATE new order - FIXED: changed from POST /order to POST /orders
+app.post('/orders', async (req, res) => {
   console.log('POST /orders route hit!');
   console.log('Request body:', req.body);
   console.log('Headers:', req.headers);
   
   try {
-    const { userId, items, totalAmount, status } = req.body;
+    const { userId, items, totalAmount, status, deliveryData } = req.body;
 
     // Enhanced validation with better error messages
     if (!userId) {
@@ -361,6 +382,7 @@ app.post('/order', async (req, res) => {
       items: items,
       totalAmount: parseFloat(totalAmount) || 0,
       status: status || "pending",
+      deliveryData: deliveryData || null, // Include delivery data if provided
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -487,46 +509,6 @@ app.delete('/orders/:id', async (req, res) => {
       details: process.env.NODE_ENV !== 'production' ? error.message : undefined
     });
   }
-});
-
-// ======================= TESTING & ERROR HANDLING =======================
-
-// Test route to verify server is working
-app.get('/test-orders', (req, res) => {
-  console.log('Test route hit');
-  res.json({ 
-    success: true,
-    message: "Orders endpoint is working", 
-    timestamp: new Date().toISOString(),
-    database: db ? "connected" : "disconnected",
-    server: "running"
-  });
-});
-
-// Server health check
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    database: db ? 'connected' : 'disconnected'
-  });
-});
-
-// ======================= REVIEWS =======================
-
-// (keeping your reviews CRUD as is...)
-
-// ======================= MIDDLEWARE & ERROR HANDLING =======================
-
-// Add route registration logging
-console.log('All Orders routes registered at startup');
-
-// Add middleware to log all requests (place this BEFORE your routes)
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  console.log('Request body:', req.body);
-  next();
 });
 
 // Add 404 handler at the very end (AFTER all your routes)
