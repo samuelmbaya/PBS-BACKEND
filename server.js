@@ -2,11 +2,14 @@ require('dotenv').config()
 const express = require("express")
 const cors = require('cors')
 const { MongoClient, ObjectId } = require("mongodb")
-const app = express()
-const port = process.env.PORT || 3000
 const base64 = require('base-64')
 
-// Updated CORS configuration to allow your domain
+const app = express()
+const port = process.env.PORT || 3000
+
+console.log('Starting server setup...');
+
+// CORS configuration
 app.use(cors({
   origin: [
     'https://poweredbysamuel.co.za',
@@ -21,58 +24,58 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }))
 
-const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/"
-
 app.use(express.json())
 
-// Add middleware to log all requests (place this BEFORE your routes)
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  console.log('Request body:', req.body);
-  next();
-});
+console.log('Middleware configured...');
 
 let client, db
 
 async function connectToMongo() {
-  client = new MongoClient(process.env.MONGODB_URI, { tls: true });
-  await client.connect();
-  db = client.db("PWS"); // Explicitly set to PWS
-  console.log("Connected to MongoDB");
+  try {
+    client = new MongoClient(process.env.MONGODB_URI, { tls: true });
+    await client.connect();
+    db = client.db("PWS");
+    console.log("Connected to MongoDB");
+  } catch (error) {
+    console.error("MongoDB connection error:", error);
+    throw error;
+  }
 }
 
-// Middleware for Basic Authentication
-async function basicAuth(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Basic ")) {
-    return res.status(401).json({ message: "Authorization header missing or invalid" });
-  }
-
-  const base64Credentials = authHeader.split(" ")[1];
-  const credentials = base64.decode(base64Credentials).split(":");
-  const email = credentials[0];
-  const password = credentials[1];
-
-  const collection = db.collection("users");
-  const user = await collection.findOne({ email });
-
-  if (!user) {
-    return res.status(401).json({ message: "User not found" });
-  }
-
-  const decodedStoredPassword = base64.decode(user.password);
-  if (decodedStoredPassword !== password) {
-    return res.status(401).json({ message: "Invalid password" });
-  }
-
-  req.user = user;
+// Basic request logging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
-}
+});
 
-// ======================= AUTH =======================
+console.log('Setting up routes...');
 
-// Sign in
+// ======================= HEALTH CHECK =======================
+app.get('/health', (req, res) => {
+  console.log('Health check requested');
+  res.json({
+    success: true,
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    database: db ? 'connected' : 'disconnected'
+  });
+});
+
+// ======================= TEST ROUTE =======================
+app.get('/test-orders', (req, res) => {
+  console.log('Test route hit');
+  res.json({ 
+    success: true,
+    message: "Orders endpoint is working", 
+    timestamp: new Date().toISOString(),
+    database: db ? "connected" : "disconnected",
+    server: "running"
+  });
+});
+
+// ======================= AUTH ROUTES =======================
+console.log('Setting up auth routes...');
+
 app.post('/signin', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -99,12 +102,11 @@ app.post('/signin', async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error('Signin error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Sign up
 app.post('/signup', async (req, res) => {
   try {
     const user = req.body;
@@ -116,24 +118,10 @@ app.post('/signup', async (req, res) => {
     const collection = db.collection("Users");
     const normalizedEmail = user.email.toLowerCase();
 
-    const existingUserQuery = { email: normalizedEmail };
-    if (user.username) {
-      existingUserQuery.$or = [
-        { email: normalizedEmail },
-        { username: user.username }
-      ];
-      delete existingUserQuery.email;
-    }
-
-    const existingUser = await collection.findOne(existingUserQuery);
+    const existingUser = await collection.findOne({ email: normalizedEmail });
 
     if (existingUser) {
-      if (existingUser.email === normalizedEmail) {
-        return res.status(409).json({ error: 'Email already registered' });
-      }
-      if (user.username && existingUser.username === user.username) {
-        return res.status(409).json({ error: 'Username already taken' });
-      }
+      return res.status(409).json({ error: 'Email already registered' });
     }
 
     const userData = { ...user };
@@ -150,133 +138,19 @@ app.post('/signup', async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-
-    if (error.code === 11000) {
-      const duplicateField = Object.keys(error.keyPattern || {})[0] || 'field';
-      if (duplicateField === 'email') {
-        return res.status(409).json({ error: 'Email already registered' });
-      } else if (duplicateField === 'username') {
-        return res.status(409).json({ error: 'Username already taken' });
-      } else {
-        return res.status(409).json({ error: `${duplicateField} already exists` });
-      }
-    }
-
+    console.error('Signup error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// ======================= CART =======================
-
-app.get('/cart', async (req, res) => {
-  try {
-    const cart = await db.collection("Cart").find().toArray();
-    res.status(200).json({ message: "Cart fetched successfully", data: cart });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch cart items" });
-  }
-});
-
-app.post('/cart', async (req, res) => {
-  try {
-    const newItem = req.body;
-
-    if (!newItem.productId || !newItem.quantity) {
-      return res.status(400).json({ error: "Missing productId or quantity" });
-    }
-
-    const result = await db.collection("Cart").insertOne(newItem);
-
-    res.status(201).json({ message: "Item added to cart successfully", data: { _id: result.insertedId, ...newItem } });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to add item to cart" });
-  }
-});
-
-app.put('/cart/:productId', async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const updateData = req.body;
-
-    if (!updateData.quantity) {
-      return res.status(400).json({ error: "Missing quantity in request body" });
-    }
-
-    const result = await db.collection("Cart").updateOne(
-      { productId: productId },
-      { $set: { quantity: updateData.quantity } }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: "Item not found in cart" });
-    }
-
-    res.status(200).json({ message: "Cart item updated successfully", updated: result.modifiedCount });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update cart item" });
-  }
-});
-
-app.delete('/cart/:productId', async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const result = await db.collection("Cart").deleteOne({ productId: productId });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ error: "Item not found in cart" });
-    }
-
-    res.status(200).json({ message: "Cart item deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete cart item" });
-  }
-});
-
-// ======================= USERS =======================
-
-app.get('/users', async (req, res) => {
-  try {
-    const users = await db.collection("Users").find({}, { projection: { password: 0 } }).toArray();
-    res.status(200).json({ message: "Users fetched successfully", data: users });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch users" });
-  }
-});
-
-// ======================= TESTING & ERROR HANDLING =======================
-
-// Test route to verify server is working
-app.get('/test-orders', (req, res) => {
-  console.log('Test route hit');
-  res.json({ 
-    success: true,
-    message: "Orders endpoint is working", 
-    timestamp: new Date().toISOString(),
-    database: db ? "connected" : "disconnected",
-    server: "running"
-  });
-});
-
-// Server health check
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    database: db ? 'connected' : 'disconnected'
-  });
-});
-
-// ======================= ORDERS =======================
+// ======================= ORDER ROUTES =======================
+console.log('Setting up order routes...');
 
 // GET all orders
 app.get('/orders', async (req, res) => {
   console.log('GET /orders route hit');
   try {
-    // Check database connection
     if (!db) {
-      console.error('Database not connected');
       return res.status(500).json({ error: "Database connection not available" });
     }
 
@@ -305,24 +179,19 @@ app.get('/orders/:id', async (req, res) => {
     const { id } = req.params;
     
     if (!ObjectId.isValid(id)) {
-      console.log('Invalid ObjectId provided:', id);
       return res.status(400).json({ error: "Invalid order ID format" });
     }
 
-    // Check database connection
     if (!db) {
-      console.error('Database not connected');
       return res.status(500).json({ error: "Database connection not available" });
     }
 
     const order = await db.collection("Orders").findOne({ _id: new ObjectId(id) });
     
     if (!order) {
-      console.log('Order not found with id:', id);
       return res.status(404).json({ error: "Order not found" });
     }
 
-    console.log('Order found:', order._id);
     res.status(200).json({ 
       success: true,
       data: order 
@@ -336,64 +205,47 @@ app.get('/orders/:id', async (req, res) => {
   }
 });
 
-// CREATE new order - FIXED: changed from POST /order to POST /orders
+// CREATE new order
 app.post('/orders', async (req, res) => {
-  console.log('POST /orders route hit!');
-  console.log('Request body:', req.body);
-  console.log('Headers:', req.headers);
+  console.log('POST /orders route hit');
+  console.log('Request body:', JSON.stringify(req.body, null, 2));
   
   try {
     const { userId, items, totalAmount, status, deliveryData } = req.body;
 
-    // Enhanced validation with better error messages
+    // Validation
     if (!userId) {
-      console.log('Missing userId');
       return res.status(400).json({ error: "userId is required" });
     }
     
-    if (!items) {
-      console.log('Missing items');
-      return res.status(400).json({ error: "items array is required" });
-    }
-    
-    if (!Array.isArray(items)) {
-      console.log('Items is not an array:', typeof items);
-      return res.status(400).json({ error: "items must be an array" });
-    }
-    
-    if (items.length === 0) {
-      console.log('Items array is empty');
-      return res.status(400).json({ error: "items array cannot be empty" });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "items array is required and cannot be empty" });
     }
     
     if (totalAmount === undefined || totalAmount === null) {
-      console.log('Missing totalAmount');
       return res.status(400).json({ error: "totalAmount is required" });
     }
 
-    // Check database connection
     if (!db) {
-      console.error('Database not connected');
       return res.status(500).json({ error: "Database connection not available" });
     }
 
     const newOrder = {
-      userId: userId.toString(), // Ensure string
+      userId: userId.toString(),
       items: items,
       totalAmount: parseFloat(totalAmount) || 0,
       status: status || "pending",
-      deliveryData: deliveryData || null, // Include delivery data if provided
+      deliveryData: deliveryData || null,
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
-    console.log('Creating order with data:', newOrder);
+    console.log('Creating order with data:', JSON.stringify(newOrder, null, 2));
 
-    // Test database connection first
     const collection = db.collection("Orders");
     const result = await collection.insertOne(newOrder);
 
-    console.log('Order created successfully:', result.insertedId);
+    console.log('Order created successfully with ID:', result.insertedId);
 
     res.status(201).json({ 
       success: true,
@@ -406,42 +258,31 @@ app.post('/orders', async (req, res) => {
 
   } catch (error) {
     console.error('Error in POST /orders:', error);
-    console.error('Stack trace:', error.stack);
-    
-    // Send detailed error in development, generic in production
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    
     res.status(500).json({ 
       error: "Failed to create order",
-      details: isDevelopment ? error.message : undefined,
+      details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// UPDATE order by ID
+// UPDATE order
 app.put('/orders/:id', async (req, res) => {
   console.log('PUT /orders/:id route hit with id:', req.params.id);
-  console.log('Update data:', req.body);
   
   try {
     const { id } = req.params;
     
     if (!ObjectId.isValid(id)) {
-      console.log('Invalid ObjectId provided:', id);
       return res.status(400).json({ error: "Invalid order ID format" });
     }
 
-    // Check database connection
     if (!db) {
-      console.error('Database not connected');
       return res.status(500).json({ error: "Database connection not available" });
     }
 
     const updates = { ...req.body, updatedAt: new Date() };
-    delete updates._id; // Remove _id from updates to avoid conflicts
-
-    console.log('Applying updates:', updates);
+    delete updates._id;
 
     const result = await db.collection("Orders").updateOne(
       { _id: new ObjectId(id) },
@@ -449,17 +290,13 @@ app.put('/orders/:id', async (req, res) => {
     );
 
     if (result.matchedCount === 0) {
-      console.log('Order not found for update with id:', id);
       return res.status(404).json({ error: "Order not found" });
     }
-
-    console.log('Order updated successfully. Modified count:', result.modifiedCount);
 
     res.status(200).json({ 
       success: true,
       message: "Order updated successfully", 
-      modifiedCount: result.modifiedCount,
-      matchedCount: result.matchedCount
+      modifiedCount: result.modifiedCount
     });
   } catch (error) {
     console.error('Error in PUT /orders/:id:', error);
@@ -470,7 +307,7 @@ app.put('/orders/:id', async (req, res) => {
   }
 });
 
-// DELETE order by ID
+// DELETE order
 app.delete('/orders/:id', async (req, res) => {
   console.log('DELETE /orders/:id route hit with id:', req.params.id);
   
@@ -478,29 +315,22 @@ app.delete('/orders/:id', async (req, res) => {
     const { id } = req.params;
     
     if (!ObjectId.isValid(id)) {
-      console.log('Invalid ObjectId provided:', id);
       return res.status(400).json({ error: "Invalid order ID format" });
     }
 
-    // Check database connection
     if (!db) {
-      console.error('Database not connected');
       return res.status(500).json({ error: "Database connection not available" });
     }
 
     const result = await db.collection("Orders").deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
-      console.log('Order not found for deletion with id:', id);
       return res.status(404).json({ error: "Order not found" });
     }
 
-    console.log('Order deleted successfully with id:', id);
-
     res.status(200).json({ 
       success: true,
-      message: "Order deleted successfully",
-      deletedCount: result.deletedCount
+      message: "Order deleted successfully"
     });
   } catch (error) {
     console.error('Error in DELETE /orders/:id:', error);
@@ -511,28 +341,104 @@ app.delete('/orders/:id', async (req, res) => {
   }
 });
 
-// Add 404 handler at the very end (AFTER all your routes)
+// ======================= CART ROUTES =======================
+console.log('Setting up cart routes...');
+
+app.get('/cart', async (req, res) => {
+  try {
+    const cart = await db.collection("Cart").find().toArray();
+    res.status(200).json({ message: "Cart fetched successfully", data: cart });
+  } catch (error) {
+    console.error('Cart fetch error:', error);
+    res.status(500).json({ error: "Failed to fetch cart items" });
+  }
+});
+
+app.post('/cart', async (req, res) => {
+  try {
+    const newItem = req.body;
+
+    if (!newItem.productId || !newItem.quantity) {
+      return res.status(400).json({ error: "Missing productId or quantity" });
+    }
+
+    const result = await db.collection("Cart").insertOne(newItem);
+    res.status(201).json({ message: "Item added to cart successfully", data: { _id: result.insertedId, ...newItem } });
+  } catch (error) {
+    console.error('Cart add error:', error);
+    res.status(500).json({ error: "Failed to add item to cart" });
+  }
+});
+
+app.put('/cart/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const updateData = req.body;
+
+    if (!updateData.quantity) {
+      return res.status(400).json({ error: "Missing quantity in request body" });
+    }
+
+    const result = await db.collection("Cart").updateOne(
+      { productId: productId },
+      { $set: { quantity: updateData.quantity } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Item not found in cart" });
+    }
+
+    res.status(200).json({ message: "Cart item updated successfully", updated: result.modifiedCount });
+  } catch (error) {
+    console.error('Cart update error:', error);
+    res.status(500).json({ error: "Failed to update cart item" });
+  }
+});
+
+app.delete('/cart/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const result = await db.collection("Cart").deleteOne({ productId: productId });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Item not found in cart" });
+    }
+
+    res.status(200).json({ message: "Cart item deleted successfully" });
+  } catch (error) {
+    console.error('Cart delete error:', error);
+    res.status(500).json({ error: "Failed to delete cart item" });
+  }
+});
+
+// ======================= USER ROUTES =======================
+console.log('Setting up user routes...');
+
+app.get('/users', async (req, res) => {
+  try {
+    const users = await db.collection("Users").find({}, { projection: { password: 0 } }).toArray();
+    res.status(200).json({ message: "Users fetched successfully", data: users });
+  } catch (error) {
+    console.error('Users fetch error:', error);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// ======================= ERROR HANDLERS =======================
+console.log('Setting up error handlers...');
+
+// 404 handler
 app.use('*', (req, res) => {
   console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
-  console.log('Available routes: GET /health, GET /test-orders, GET /orders, POST /orders, etc.');
   res.status(404).json({ 
     error: 'Route not found',
     method: req.method,
     path: req.originalUrl,
-    timestamp: new Date().toISOString(),
-    availableRoutes: [
-      'GET /health',
-      'GET /test-orders', 
-      'GET /orders',
-      'GET /orders/:id',
-      'POST /orders',
-      'PUT /orders/:id',
-      'DELETE /orders/:id'
-    ]
+    timestamp: new Date().toISOString()
   });
 });
 
-// Add global error handler
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('Global error handler caught:', err);
   res.status(500).json({ 
@@ -542,20 +448,29 @@ app.use((err, req, res, next) => {
   });
 });
 
+console.log('All routes configured. Starting server...');
+
 // Server startup
 connectToMongo().then(() => {
   app.listen(port, '0.0.0.0', () => {
-    console.log(`Server is running on http://0.0.0.0:${port}`);
-    console.log('Available endpoints:');
-    console.log('- GET /health - Server health check');
-    console.log('- GET /test-orders - Test orders functionality');
-    console.log('- GET /orders - Get all orders');
-    console.log('- POST /orders - Create new order');
-    console.log('- GET /orders/:id - Get specific order');
-    console.log('- PUT /orders/:id - Update order');
-    console.log('- DELETE /orders/:id - Delete order');
+    console.log(`✅ Server is running successfully on http://0.0.0.0:${port}`);
+    console.log('📋 Available endpoints:');
+    console.log('   - GET /health');
+    console.log('   - GET /test-orders');
+    console.log('   - POST /signin');
+    console.log('   - POST /signup');
+    console.log('   - GET /orders');
+    console.log('   - POST /orders');
+    console.log('   - GET /orders/:id');
+    console.log('   - PUT /orders/:id');
+    console.log('   - DELETE /orders/:id');
+    console.log('   - GET /cart');
+    console.log('   - POST /cart');
+    console.log('   - PUT /cart/:productId');
+    console.log('   - DELETE /cart/:productId');
+    console.log('   - GET /users');
   });
 }).catch((error) => {
-  console.error("Failed to connect to MongoDB:", error);
-  process.exit(1); // Exit if can't connect to database
+  console.error("❌ Failed to connect to MongoDB:", error);
+  process.exit(1);
 });
