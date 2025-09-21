@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css">
+  <title>Fake Store API</title>
+
+</head>
+
+<body>
+  <header>
+    <h1 id="site-title"> Sam's QuickBuy Store</h1>
+    <div class="cart-info">
+      <button id="theme-toggle-btn">Dark Mode</button>
+      <button id="view-cart-btn">Cart (<span id="cart-count">0</span>)</button>
+    </div>
+  </header>
+
+  <div id="products-container"></div>
+
+  <div id="cart-modal">
+    <div id="cart-content">
+      <button id="close-cart">×</button>
+      <h3>Your Cart</h3>
+      <div id="cart-items"></div>
+    </div>
+  </div>
+
+  <div id="product-details-modal">
+    <div id="product-details-content">
+      <button id="close-details-btn">×</button>
+      <img class="details-image" src="" alt="Product Image" />
+      <h2 class="details-title"></h2>
+      <p class="details-category"></p>
+      <p class="details-description"></p>
+      <p class="details-price"></p>
+      <button id="details-add-to-cart-btn">Add to Cart</button>
+    </div>
+  </div>
+
+  <script>
+    const productsContainer = document.getElementById('products-container');
+    const cartCountEl = document.getElementById('cart-count');
+    const cartItemsContainer = document.getElementById('cart-items');
+    const cartModal = document.getElementById('cart-modal');
+    const closeCartBtn = document.getElementById('close-cart');
+    const viewCartBtn = document.getElementById('view-cart-btn');
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+
+    const productDetailsModal = document.getElementById('product-details-modal');
+    const productDetailsContent = document.getElementById('product-details-content');
+    const closeDetailsBtn = document.getElementById('close-details-btn');
+    const detailsImage = productDetailsContent.querySelector('.details-image');
+    const detailsTitle = productDetailsContent.querySelector('.details-title');
+    const detailsCategory = productDetailsContent.querySelector('.details-category');
+    const detailsDescription = productDetailsContent.querySelector('.details-description');
+    const detailsPrice = productDetailsContent.querySelector('.details-price');
+
+    let cartItems = [];
+
+    fetch('https://fakestoreapi.com/products')
+      .then(res => res.json())
+      .then(data => {
+        data.forEach(product => {
+          const card = document.createElement('div');
+          card.className = 'product-card';
+          card.innerHTML = `
+            <div class="product-image">
+              <img src="${product.image}" alt="${product.title}">
+            </div>
+            <p>${product.title}</p>
+            <p>$${product.price}</p>
+            <button>Add to Cart</button>
+          `;
+
+          const button = card.querySelector('button');
+          button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addToCart(product);
+          });
+
+          card.addEventListener('click', () => {
+            showProductDetails(product);
+          });
+
+          productsContainer.appendChild(card);
+        });
+      });
+
+    function addToCart(product) {
+      cartItems.push(product);
+      cartCountEl.textContent = cartItems.length;
+    }
+
+    function showCart() {
+      cartItemsContainer.innerHTML = '';
+
+      if (cartItems.length === 0) {
+        cartItemsContainer.innerHTML = '<p>Your cart is empty.</p>';
+      } else {
+        cartItems.forEach((item, index) => {
+          const div = document.createElement('div');
+          div.style.marginBottom = '10px';
+          div.innerHTML = `
+            <p>${item.title} - $${item.price}</p>
+            <button class="remove-btn" onclick="removeFromCart(${index})">Remove</button>
+          `;
+          cartItemsContainer.appendChild(div);
+        });
+      }
+
+      cartModal.style.display = 'flex';
+    }
+
+    function removeFromCart(index) {
+      cartItems.splice(index, 1);
+      cartCountEl.textContent = cartItems.length;
+      showCart();
+    }
+
+    closeCartBtn.addEventListener('click', () => {
+      cartModal.style.display = 'none';
+    });
+
+    viewCartBtn.addEventListener('click', () => {
+      showCart();
+    });
+
+    themeToggleBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      themeToggleBtn.textContent = document.body.classList.contains('dark-mode') ? 'Light Mode' : 'Dark Mode';
+    });
+
+    function showProductDetails(product) {
+      detailsImage.src = product.image;
+      detailsImage.alt = product.title;
+      detailsTitle.textContent = product.title;
+      detailsCategory.textContent = 'Category: ' + product.category;
+      detailsDescription.textContent = product.description;
+      detailsPrice.textContent = '$' + product.price;
+
+      productDetailsModal.style.display = 'flex';
+    }
+
+    closeDetailsBtn.addEventListener('click', () => {
+      productDetailsModal.style.display = 'none';
+    });
+
+    productDetailsModal.addEventListener('click', (e) => {
+      if (e.target === productDetailsModal) {
+        productDetailsModal.style.display = 'none';
+      }
+    });
+
+    window.removeFromCart = removeFromCart;
+  </script>
+</body>
+
+</html>
