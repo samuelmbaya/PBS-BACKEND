@@ -311,11 +311,11 @@ app.post('/orders', async (req, res) => {
 if (require.main === module) {
   connectToMongo()
     .then(() => {
-      app.listen(port, "0.0.0.0", () => {
+      app.listen(port, '0.0.0.0', () => {
         console.log(`Server running on http://0.0.0.0:${port}`);
       });
     })
-    .catch((err) => {
+    .catch(err => {
       console.error("Failed to connect to MongoDB:", err);
     });
 }
