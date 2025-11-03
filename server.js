@@ -306,7 +306,7 @@ if (require.main === module) {
   connectToMongo()
     .then(() => {
       app.listen(port, '0.0.0.0', () => {
-        console.log(`Server running on http://0.0.0.0:${port}`);
+        console.log(`Server running on http://localhost:${port}`);
       });
     })
     .catch(err => {
