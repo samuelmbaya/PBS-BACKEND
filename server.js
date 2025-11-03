@@ -17,6 +17,8 @@ app.use(cors({
     'http://poweredbysamuel.co.za',
     'https://www.poweredbysamuel.co.za',
     'http://www.poweredbysamuel.co.za',
+    'http://www.pbselectricalsolutions.co.za',
+    'https://www.pbselectricalsolutions.co.za',
     'http://localhost:5173',
     'http://localhost:3000'
   ],
