@@ -21,7 +21,8 @@ app.use(cors({
     'https://www.pbselectricalsolutions.co.za',
     "http://www.pbselectricalsolutions.co.za.s3.amazonaws.com",
     "https://www.pbselectricalsolutions.co.za.s3.amazonaws.com",
-    'http://localhost:5173',
+    'http://44.198.25.29:3000',
+    'https://44.198.25.29:3000',,
     'http://localhost:3000'
   ],
   credentials: true,
