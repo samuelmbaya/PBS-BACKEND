@@ -1,47 +1,59 @@
+# ----------------------------------------
 # Logs
+# ----------------------------------------
 logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+*.tmp
+.log/
+test-results/
+.html
 
-# Runtime data
+# ----------------------------------------
+# Runtime Data
+# ----------------------------------------
 pids
 *.pid
 *.seed
 *.pid.lock
 
-# Dependency directories
+# ----------------------------------------
+# Dependency Directories
+# ----------------------------------------
 node_modules/
 jspm_packages/
 
-# Optional npm cache directory
+# ----------------------------------------
+# Optional Caches
+# ----------------------------------------
 .npm
-
-# Optional eslint cache
 .eslintcache
-
-# Optional stylelint cache
 .stylelintcache
 
-# Output of 'npm pack'
-*.tgz
-
-# Output of build tools
+# ----------------------------------------
+# Build Outputs
+# ----------------------------------------
 dist/
 build/
 .cache/
 .next/
 out/
+*.tgz
 
-# dotenv environment variables file
+# ----------------------------------------
+# Environment Variables
+# ----------------------------------------
 .env
 .env.test
 .env.production
 .env.local
 
-# IDEs and editors
+# ----------------------------------------
+# IDEs and Editors
+# ----------------------------------------
 .vscode/
 .idea/
 *.suo
@@ -50,11 +62,15 @@ out/
 *.sln
 *.sw?
 
-# OS files
+# ----------------------------------------
+# OS Files
+# ----------------------------------------
 .DS_Store
 Thumbs.db
 
-# PM2 logs and dumps
+# ----------------------------------------
+# PM2 Logs and Dumps
+# ----------------------------------------
 .pm2/logs
 .pm2/pids
 .pm2/dump.pm2
