@@ -22,9 +22,10 @@ app.use(cors({
     "http://www.pbselectricalsolutions.co.za.s3.amazonaws.com",
     "https://www.pbselectricalsolutions.co.za.s3.amazonaws.com",
     'http://44.198.25.29:3000',
-    'https://44.198.25.29:3000',,
-    'http://localhost:3000'
+    'https://44.198.25.29:3000',
+    // 'http://localhost:3000' // remove this if you don't want localhost
   ],
+
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -34,7 +35,7 @@ app.use(cors({
 let client, db;
 async function connectToMongo() {
   if (db) return db; // Return existing connection
-  
+
   client = new MongoClient(process.env.MONGODB_URI, { tls: true });
   await client.connect();
   db = client.db("PWS");
@@ -310,11 +311,11 @@ app.post('/orders', async (req, res) => {
 if (require.main === module) {
   connectToMongo()
     .then(() => {
-      app.listen(port, '0.0.0.0', () => {
+      app.listen(port, "0.0.0.0", () => {
         console.log(`Server running on http://0.0.0.0:${port}`);
       });
     })
-    .catch(err => {
+    .catch((err) => {
       console.error("Failed to connect to MongoDB:", err);
     });
 }
