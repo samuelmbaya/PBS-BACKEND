@@ -13,18 +13,9 @@ app.use(express.json());
 //CORS setup
 app.use(cors({
   origin: [
-    'https://poweredbysamuel.co.za',
-    'http://poweredbysamuel.co.za',
-    'https://www.poweredbysamuel.co.za',
-    'http://www.poweredbysamuel.co.za',
-    'http://www.pbselectricalsolutions.co.za',
-    'https://www.pbselectricalsolutions.co.za',
-    'http://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
-    'https://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
-    'http://pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
-    'https://pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
-    'http://44.198.25.29:3000',
-    'https://44.198.25.29:3000',
+      'http://localhost:5173',
+      'http://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
+      'http://44.198.25.29:3000',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
