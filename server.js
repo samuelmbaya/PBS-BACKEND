@@ -3,6 +3,7 @@ console.log("Mongo URI:", process.env.MONGODB_URI);
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ObjectId } = require("mongodb");
+import axios from 'axios';
 const base64 = require("base-64");
 
 const app = express();
@@ -83,11 +84,25 @@ app.post('/signup', async (req, res) => {
 //SIGNIN
 app.post('/signin', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, token } = req.body; // added token
 
     if (!email || !password)
       return res.status(400).json({ error: 'Email and password are required' });
 
+    // === Added reCAPTCHA verification ===
+    const SECRET_KEY_v2 = '6LeF6AcsAAAAAJKUrROsiuxCtw9-04BgyIu1QDVt';
+    const recaptchaUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${SECRET_KEY_v2}&response=${token}`;
+
+    const recaptchaResponse = await axios.post(recaptchaUrl);
+    if(recaptchaResponse.data.success) {
+      success = true 
+    }
+    const recaptchaData = recaptchaResponse.data;
+
+    if (!recaptchaData.success)
+      return res.status(403).json({ error: 'reCAPTCHA verification failed' });
+
+    // === Continue original logic ===
     const encodedPassword = Buffer.from(password).toString('base64');
     const user = await db.collection('Users').findOne({ email: email.toLowerCase() });
 
