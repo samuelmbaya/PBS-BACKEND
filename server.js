@@ -14,9 +14,9 @@ app.use(express.json());
 //CORS setup
 app.use(cors({
   origin: [
-      'http://localhost:5173',
-      'http://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
-      'http://44.198.25.29:3000',
+    'http://localhost:5173',
+    'http://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
+    'http://44.198.25.29:3000',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -84,25 +84,31 @@ app.post('/signup', async (req, res) => {
 //SIGNIN
 app.post('/signin', async (req, res) => {
   try {
-    const { email, password, token } = req.body; // added token
+    const { email, password, token } = req.body; // token comes from frontend
 
-    if (!email || !password)
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!email || !password || !token)
+      return res.status(400).json({ error: 'Email, password, and reCAPTCHA token are required' });
 
-    // === Added reCAPTCHA verification ===
-    const SECRET_KEY_v2 = '6LeF6AcsAAAAAJKUrROsiuxCtw9-04BgyIu1QDVt';
-    const recaptchaUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${SECRET_KEY_v2}&response=${token}`;
+    // === reCAPTCHA v2 verification ===
+    const SECRET_KEY_v2 = process.env.RECAPTCHA_SECRET_KEY || '6LeF6AcsAAAAAJKUrROsiuxCtw9-04BgyIu1QDVt';
+    const verifyUrl = `https://www.google.com/recaptcha/api/siteverify`;
 
-    const recaptchaResponse = await axios.post(recaptchaUrl);
-    if(recaptchaResponse.data.success) {
-      success = true 
+    const response = await axios.post(
+      verifyUrl,
+      new URLSearchParams({
+        secret: SECRET_KEY_v2,
+        response: token,
+      })
+    );
+
+    const recaptchaData = response.data;
+    console.log("reCAPTCHA verification response:", recaptchaData);
+
+    if (!recaptchaData.success) {
+      return res.status(403).json({ error: 'reCAPTCHA verification failed', details: recaptchaData });
     }
-    const recaptchaData = recaptchaResponse.data;
 
-    if (!recaptchaData.success)
-      return res.status(403).json({ error: 'reCAPTCHA verification failed' });
-
-    // === Continue original logic ===
+    // === Proceed with login ===
     const encodedPassword = Buffer.from(password).toString('base64');
     const user = await db.collection('Users').findOne({ email: email.toLowerCase() });
 
@@ -114,9 +120,10 @@ app.post('/signin', async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
-        name: user.name
-      }
+        name: user.name,
+      },
     });
+
   } catch (error) {
     console.error("Signin error:", error);
     res.status(500).json({ error: "Internal server error" });
