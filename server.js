@@ -3,7 +3,7 @@ console.log("Mongo URI:", process.env.MONGODB_URI);
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ObjectId } = require("mongodb");
-import axios from 'axios';
+const axios = require('axios');
 const base64 = require("base-64");
 
 const app = express();
