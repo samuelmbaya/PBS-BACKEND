@@ -16,6 +16,7 @@ app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
+    'http://pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
     'http://44.198.25.29:3000',
   ],
   credentials: true,
