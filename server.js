@@ -314,7 +314,17 @@ app.post('/orders', async (req, res) => {
     };
 
     const result = await db.collection("Orders").insertOne(order);
-    res.status(201).json({ message: "Order created", id: result.insertedId });
+    
+    // Return the complete order with _id
+    const createdOrder = {
+      _id: result.insertedId,
+      ...order
+    };
+    
+    res.status(201).json({ 
+      message: "Order created", 
+      data: createdOrder  // Return full order object
+    });
   } catch (error) {
     console.error("POST /orders error:", error);
     res.status(500).json({ error: "Failed to create order" });
