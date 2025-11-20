@@ -17,10 +17,7 @@ app.use(cors({
     'http://localhost:5173',
     'http://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
     'http://pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
-    'https://pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',  // ✅ Add HTTPS version
-    'https://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',  // ✅ Add HTTPS with www
-    'https://pbselectricalsolutions.co.za',
-    'https://www.pbselectricalsolutions.co.za',
+    'http://44.198.25.29:3000',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -45,9 +42,6 @@ async function connectToMongo() {
 //SIGNUP
 app.post('/signup', async (req, res) => {
   try {
-    const database = await connectToMongo();
-    const collection = database.collection("Users");
-
     const user = req.body;
 
     if (!user.email || !user.password) {
@@ -62,7 +56,9 @@ app.post('/signup', async (req, res) => {
       return res.status(400).json({ error: 'Passwords do not match' });
     }
 
+    const collection = db.collection("Users");
     const normalizedEmail = user.email.toLowerCase();
+
     const existingUser = await collection.findOne({ email: normalizedEmail });
     if (existingUser) return res.status(409).json({ error: 'Email already registered' });
 
