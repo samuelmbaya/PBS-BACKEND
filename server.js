@@ -42,6 +42,9 @@ async function connectToMongo() {
 //SIGNUP
 app.post('/signup', async (req, res) => {
   try {
+    const database = await connectToMongo();
+    const collection = database.collection("Users");
+
     const user = req.body;
 
     if (!user.email || !user.password) {
@@ -56,9 +59,7 @@ app.post('/signup', async (req, res) => {
       return res.status(400).json({ error: 'Passwords do not match' });
     }
 
-    const collection = db.collection("Users");
     const normalizedEmail = user.email.toLowerCase();
-
     const existingUser = await collection.findOne({ email: normalizedEmail });
     if (existingUser) return res.status(409).json({ error: 'Email already registered' });
 
