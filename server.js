@@ -17,9 +17,10 @@ app.use(cors({
     'http://localhost:5173',
     'http://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
     'http://pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',
+    'https://pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',  // ✅ Add HTTPS version
+    'https://www.pbselectricalsolutions.co.za.s3-website-us-east-1.amazonaws.com',  // ✅ Add HTTPS with www
     'https://pbselectricalsolutions.co.za',
     'https://www.pbselectricalsolutions.co.za',
-    'http://44.198.25.29:3000',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
