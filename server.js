@@ -66,6 +66,7 @@ app.post('/signup', async (req, res) => {
       name: user.name || "",
       email: normalizedEmail,
       password: Buffer.from(user.password).toString('base64'),
+      facialId: null, // Initialize for future FaceIO enrollment
       createdAt: new Date()
     };
 
@@ -82,7 +83,83 @@ app.post('/signup', async (req, res) => {
   }
 });
 
-//SIGNIN
+// Associate FaceID with User (for post-enrollment)
+app.post('/associate-face', async (req, res) => {
+  try {
+    const { email, facialId } = req.body;
+    if (!email || !facialId) {
+      return res.status(400).json({ error: 'Email and facialId are required' });
+    }
+
+    const collection = db.collection("Users");
+    const normalizedEmail = email.toLowerCase();
+
+    const user = await collection.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update only if not already set (or allow overwrite if needed)
+    if (user.facialId) {
+      return res.status(409).json({ error: 'Face already associated' });
+    }
+
+    const result = await collection.updateOne(
+      { email: normalizedEmail },
+      { $set: { facialId } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.status(200).json({ 
+      message: 'Face associated successfully',
+      userId: user._id 
+    });
+  } catch (error) {
+    console.error("Associate face error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Face-based Login (passwordless, verifies facialId match)
+app.post('/login-face', async (req, res) => {
+  try {
+    const { email, facialId } = req.body; // No password or reCAPTCHA needed—trust FaceIO match
+
+    if (!email || !facialId) {
+      return res.status(400).json({ error: 'Email and facialId are required' });
+    }
+
+    const collection = db.collection("Users");
+    const normalizedEmail = email.toLowerCase();
+
+    const user = await collection.findOne({ 
+      email: normalizedEmail, 
+      facialId: facialId // Verify exact match
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid face authentication (not enrolled or mismatch)' });
+    }
+
+    res.status(200).json({
+      message: 'Face login successful',
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+      },
+    });
+
+  } catch (error) {
+    console.error("Face login error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+//SIGNIN (password-based)
 app.post('/signin', async (req, res) => {
   try {
     const { email, password, token } = req.body; // token comes from frontend
@@ -135,7 +212,7 @@ app.post('/signin', async (req, res) => {
 
 app.get('/users', async (req, res) => {
   try {
-    const users = await db.collection("Users").find({}, { projection: { password: 0 } }).toArray();
+    const users = await db.collection("Users").find({}, { projection: { password: 0, facialId: 0 } }).toArray(); // Hide sensitive fields
     res.status(200).json({ message: "Users fetched successfully", data: users });
   } catch (error) {
     console.error("GET /users error:", error);
